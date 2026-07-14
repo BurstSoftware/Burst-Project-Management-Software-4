@@ -14,7 +14,6 @@ def get_file_language(file_name: str) -> str:
     """Map filename or extension to Streamlit syntax highlighting language."""
     name_lower = file_name.lower()
 
-    # Special filenames
     special_files = {
         "dockerfile": "dockerfile",
         "docker-compose.yml": "dockerfile",
@@ -26,10 +25,8 @@ def get_file_language(file_name: str) -> str:
     if name_lower in special_files:
         return special_files[name_lower]
 
-    # Get extension
     ext = name_lower.split(".")[-1] if "." in name_lower else ""
     
-    # === EXHAUSTIVE LANGUAGE MAP (HTMX included) ===
     lang_map = {
         # Systems & Low-Level
         "c": "c", "h": "c",
@@ -70,7 +67,7 @@ def get_file_language(file_name: str) -> str:
         
         # Web & Markup
         "html": "html", "htm": "html",
-        "htmx": "html",          # HTMX support
+        "htmx": "html",
         "css": "css", "scss": "scss", "sass": "sass", "less": "less",
         "md": "markdown", "markdown": "markdown",
         "rst": "rst", "adoc": "asciidoc",
@@ -98,6 +95,28 @@ def get_file_language(file_name: str) -> str:
     }
     
     return lang_map.get(ext, "text")
+
+
+# ====================== NEW: Categorized Languages ======================
+LANGUAGE_CATEGORIES = {
+    "Systems & Low-Level": ["c", "cpp", "rust", "go", "zig", "odin", "v", "nim", "crystal"],
+    "Assembly": ["asm", "nasm"],
+    "Fortran & Scientific": ["fortran"],
+    "Functional & Lisp": ["lisp", "elisp", "scheme", "racket", "haskell", "ocaml", "fsharp", "erlang", "elixir"],
+    "Modern & Popular": ["python", "javascript", "jsx", "typescript", "tsx", "java", "kotlin", "scala", "csharp", "ruby", "php", "swift", "dart", "lua", "julia", "r"],
+    "Web & Markup": ["html", "css", "scss", "sass", "less", "markdown", "rst", "asciidoc"],
+    "Data & Config": ["json", "yaml", "toml", "xml", "ini", "properties", "bash"],
+    "Database & Query": ["sql", "graphql"],
+    "Scripting & Shell": ["bash", "fish", "powershell", "batch", "perl"],
+    "Others": ["matlab", "prolog", "solidity", "cuda", "cmake", "protobuf", "text", "dockerfile", "makefile"]
+}
+
+def get_category_for_lang(lang: str) -> str:
+    for category, langs in LANGUAGE_CATEGORIES.items():
+        if lang in langs:
+            return category
+    return list(LANGUAGE_CATEGORIES.keys())[0]
+# ======================================================================
 
 
 # Initialize session states
@@ -129,18 +148,7 @@ if st.button("Save Version Information"):
 # File Upload
 st.header("Upload Code Files")
 
-supported_types = [
-    'py','pyx','pyi','js','jsx','mjs','cjs','ts','tsx','java','kt','kts','scala','sc',
-    'c','h','cpp','cc','cxx','hpp','hxx','rs','go','zig','odin','v','nim','crystal',
-    'asm','s','S','nasm','f','f90','f95','f03','f08','for','f77',
-    'lisp','cl','el','scm','rkt','hs','lhs','ml','mli','fs','fsx','fsi',
-    'erl','hrl','ex','exs','rb','php','swift','dart','lua','jl','r','rmd',
-    'html','htm','htmx','css','scss','sass','less','md','markdown','rst','adoc',
-    'json','yaml','yml','toml','xml','ini','cfg','conf','properties','env',
-    'sql','graphql','gql','sh','bash','zsh','fish','ps1','psm1','bat','cmd',
-    'pl','pm','matlab','m','prolog','sol','cu','cuh','cmake','proto','dockerfile',
-    'k','txt'
-]
+supported_types = [...]  # (keep your full list)
 
 uploaded_files = st.file_uploader(
     "Upload code files — supports 100+ languages including .md, HTMX, Rust, Go, Julia, Zig, etc.",
@@ -161,15 +169,52 @@ if uploaded_files and app_version:
         
         st.session_state.file_dict[app_version][file_name] = file_content
 
-# Preview
+# ====================== IMPROVED PREVIEW SECTION ======================
 st.header("Codebase Preview")
+
 if app_version in st.session_state.file_dict:
     for file_name, file_content in st.session_state.file_dict[app_version].items():
         with st.expander(f"File: {file_name}"):
-            language = get_file_language(file_name)
-            st.code(file_content, language=language)
+            detected_language = get_file_language(file_name)
+            st.markdown(f"**Auto-detected:** `{detected_language}`")
 
-# PDF Generation
+            # === CATEGORIZED DROPDOWNS ===
+            col1, col2 = st.columns(2)
+
+            with col1:
+                category_list = list(LANGUAGE_CATEGORIES.keys())
+                default_category = get_category_for_lang(detected_language)
+                cat_index = category_list.index(default_category) if default_category in category_list else 0
+
+                selected_category = st.selectbox(
+                    "Category",
+                    category_list,
+                    index=cat_index,
+                    key=f"cat_{app_version}_{file_name}"
+                )
+
+            with col2:
+                lang_list = LANGUAGE_CATEGORIES[selected_category]
+                try:
+                    lang_index = lang_list.index(detected_language)
+                except ValueError:
+                    lang_index = 0
+
+                selected_language = st.selectbox(
+                    "Language (syntax highlighting)",
+                    lang_list,
+                    index=lang_index,
+                    key=f"lang_{app_version}_{file_name}"
+                )
+
+            # Display code with chosen language
+            st.code(file_content, language=selected_language)
+
+            if selected_language != detected_language:
+                st.caption("✅ Using manually selected language")
+# ======================================================================
+
+# PDF Generation (unchanged)
 if st.button("Generate and Download PDF"):
     if app_version and app_version in st.session_state.file_dict:
         pdf_buffer = BytesIO()
